@@ -1,0 +1,617 @@
+﻿@page "/lista"
+
+@using CadastroApp.Models
+@using CadastroApp.Services
+@using Microsoft.JSInterop
+@using Microsoft.Maui.ApplicationModel
+@using Microsoft.Maui.ApplicationModel.DataTransfer
+@using Microsoft.Maui.Storage
+@using QuestPDF.Fluent
+@using QuestPDF.Helpers
+@using QuestPDF.Infrastructure
+@using System.Text
+
+@inject AuthService AuthService
+@inject PessoaService PessoaService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<h3 class="titulo-pagina">Clientes Cadastrados</h3>
+
+<div class="campo-pesquisa">
+    <label>Pesquisar:</label>
+    <input class="form-control"
+           placeholder="Digite nome, e-mail, CPF ou telefone..."
+           @bind="textoPesquisa"
+           @bind:event="oninput" />
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-secondary botao-voltar" @onclick="Voltar">
+        Voltar
+    </button>
+</div>
+
+<div class="botoes-exportacao">
+    <button class="btn btn-success botao-exportar" @onclick="ExportarCsv">
+        Exportar CSV/Excel
+    </button>
+
+    <button class="btn btn-danger botao-exportar-pdf" @onclick="ExportarPdf">
+        Exportar PDF
+    </button>
+
+    <button class="btn btn-primary botao-exportar-pdf" @onclick="AbrirPdfLista">
+        Abrir/Imprimir PDF
+    </button>
+</div>
+
+@if (carregando)
+{
+    <p class="mensagem-lista">Carregando...</p>
+}
+else if (PessoasFiltradas.Count == 0)
+{
+    <p class="mensagem-lista">Nenhum cadastro encontrado.</p>
+}
+else
+{
+    <div class="lista-usuarios">
+        @foreach (var pessoa in PessoasFiltradas)
+        {
+            <div class="card-usuario" @onclick="() => AbrirDetalhe(pessoa.Id)">
+
+                <div class="card-linha">
+                    <span class="card-label">Nome</span>
+                    <span class="card-valor">@pessoa.Nome</span>
+                </div>
+
+                <div class="card-linha">
+                    <span class="card-label">E-mail</span>
+                    <span class="card-valor">@pessoa.Email</span>
+                </div>
+
+                <div class="card-linha">
+                    <span class="card-label">CPF</span>
+                    <span class="card-valor">@pessoa.CPF</span>
+                </div>
+
+                <div class="card-linha">
+                    <span class="card-label">Telefone</span>
+                    <span class="card-valor">
+                        @(string.IsNullOrWhiteSpace(pessoa.Telefone) ? "Não informado" : pessoa.Telefone)
+                    </span>
+                </div>
+
+                <div class="card-linha">
+                    <span class="card-label">Endereço</span>
+                    <span class="card-valor">
+                        @MontarEndereco(pessoa)
+                    </span>
+                </div>
+
+                <div class="card-linha">
+                    <span class="card-label">Cadastro</span>
+                    <span class="card-valor">
+                        @pessoa.DataCadastro.ToString("dd/MM/yyyy HH:mm")
+                    </span>
+                </div>
+
+                <div class="card-acoes">
+                    <button class="btn btn-warning btn-sm botao-acao"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => Editar(pessoa.Id)">
+                        Editar
+                    </button>
+
+                    <button class="btn btn-danger btn-sm botao-acao"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => ConfirmarExcluir(pessoa)">
+                        Excluir
+                    </button>
+                </div>
+
+            </div>
+        }
+    </div>
+}
+
+@code {
+    List<Pessoa> pessoas = new();
+    bool carregando = true;
+    string textoPesquisa = string.Empty;
+
+    List<Pessoa> PessoasFiltradas
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(textoPesquisa))
+            {
+                return pessoas;
+            }
+
+            var pesquisa = textoPesquisa.Trim().ToLower();
+
+            return pessoas
+                .Where(p =>
+                    (p.Nome ?? string.Empty).ToLower().Contains(pesquisa) ||
+                    (p.Email ?? string.Empty).ToLower().Contains(pesquisa) ||
+                    (p.CPF ?? string.Empty).ToLower().Contains(pesquisa) ||
+                    (p.Telefone ?? string.Empty).ToLower().Contains(pesquisa))
+                .ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.EstaLogado)
+        {
+            NavigationManager.NavigateTo("/");
+            return;
+        }
+
+        await CarregarPessoas();
+    }
+
+    async Task CarregarPessoas()
+    {
+        carregando = true;
+
+        pessoas = await PessoaService.ListarAsync();
+
+        carregando = false;
+    }
+
+    void Voltar()
+    {
+        NavigationManager.NavigateTo("/home");
+    }
+
+    void AbrirDetalhe(int id)
+    {
+        NavigationManager.NavigateTo($"/detalhe/{id}");
+    }
+
+    void Editar(int id)
+    {
+        NavigationManager.NavigateTo($"/cadastro/{id}");
+    }
+
+    async Task ConfirmarExcluir(Pessoa pessoa)
+    {
+        bool confirmou = await JSRuntime.InvokeAsync<bool>(
+            "confirm",
+            $"Tem certeza que deseja excluir o usuário {pessoa.Nome}?"
+        );
+
+        if (confirmou)
+        {
+            await PessoaService.ExcluirAsync(pessoa);
+            await CarregarPessoas();
+        }
+    }
+
+    string MontarEndereco(Pessoa pessoa)
+    {
+        var partes = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Rua))
+            partes.Add(pessoa.Rua);
+
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Bairro))
+            partes.Add(pessoa.Bairro);
+
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Numero))
+            partes.Add($"Nº {pessoa.Numero}");
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Cidade))
+            partes.Add(pessoa.Cidade);
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Estado))
+            partes.Add(pessoa.Estado);
+
+        if (!string.IsNullOrWhiteSpace(pessoa.CEP))
+            partes.Add($"CEP {pessoa.CEP}");
+
+        return partes.Count == 0 ? "Não informado" : string.Join(", ", partes);
+    }
+
+    async Task ExportarCsv()
+    {
+        try
+        {
+            if (PessoasFiltradas.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync(
+                    "alert",
+                    "Não há clientes para exportar."
+                );
+
+                return;
+            }
+
+            var csv = new StringBuilder();
+
+            csv.AppendLine("Nome;E-mail;CPF;Telefone;CEP;Rua;Numero;Cidade;Estado;Data de Cadastro");
+
+            foreach (var pessoa in PessoasFiltradas)
+            {
+                csv.AppendLine(
+    $"{FormatarCampoCsv(pessoa.Nome)};" +
+    $"{FormatarCampoCsv(pessoa.Email)};" +
+    $"{FormatarCampoCsv(pessoa.CPF)};" +
+    $"{FormatarCampoCsv(pessoa.Telefone)};" +
+    $"{FormatarCampoCsv(pessoa.CEP)};" +
+    $"{FormatarCampoCsv(pessoa.Rua)};" +
+    $"{FormatarCampoCsv(pessoa.Bairro)};" +
+    $"{FormatarCampoCsv(pessoa.Numero)};" +
+    $"{FormatarCampoCsv(pessoa.Cidade)};" +
+    $"{FormatarCampoCsv(pessoa.Estado)};" +
+    $"{FormatarCampoCsv(pessoa.DataCadastro.ToString("dd/MM/yyyy HH:mm"))}"
+                );
+            }
+
+
+            var nomeArquivo = $"clientes_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+            var caminhoArquivo = Path.Combine(
+                FileSystem.CacheDirectory,
+                nomeArquivo
+            );
+
+            await File.WriteAllTextAsync(
+                caminhoArquivo,
+                csv.ToString(),
+                new UTF8Encoding(true)
+            );
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Exportar clientes",
+                File = new ShareFile(caminhoArquivo)
+            });
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "alert",
+                $"Erro ao exportar clientes: {ex.Message}"
+            );
+        }
+    }
+
+    string FormatarCampoCsv(string? valor)
+    {
+        valor ??= string.Empty;
+
+        valor = valor.Replace("\"", "\"\"");
+
+        return $"\"{valor}\"";
+    }
+
+    async Task ExportarPdf()
+    {
+        try
+        {
+            if (PessoasFiltradas.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync(
+                    "alert",
+                    "Não há clientes para exportar."
+                );
+
+                return;
+            }
+
+            var caminhoArquivo = GerarPdfLista();
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Exportar clientes em PDF",
+                File = new ShareFile(caminhoArquivo)
+            });
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "alert",
+                $"Erro ao exportar PDF: {ex.Message}"
+            );
+        }
+    }
+
+    async Task AbrirPdfLista()
+    {
+        try
+        {
+            if (PessoasFiltradas.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync(
+                    "alert",
+                    "Não há clientes para exportar."
+                );
+
+                return;
+            }
+
+            var caminhoArquivo = GerarPdfLista();
+
+            await Launcher.Default.OpenAsync(new OpenFileRequest
+            {
+                File = new ReadOnlyFile(caminhoArquivo)
+            });
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "alert",
+                $"Erro ao abrir PDF: {ex.Message}"
+            );
+        }
+    }
+
+    string GerarPdfLista()
+    {
+        var nomeUsuario = AuthService.UsuarioLogado?.Nome ?? "Usuário não identificado";
+        var perfilUsuario = AuthService.UsuarioLogado?.Perfil ?? "Perfil não identificado";
+        var totalClientes = PessoasFiltradas.Count;
+
+        var nomeArquivo = $"clientes_{DateTime.Now:yyyyMMdd_HHmmss}.pdf";
+
+        var caminhoArquivo = Path.Combine(
+            FileSystem.CacheDirectory,
+            nomeArquivo
+        );
+
+        Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(28);
+                page.DefaultTextStyle(x => x.FontSize(9));
+
+                page.Header()
+                    .Column(header =>
+                    {
+                        header.Item()
+                            .Row(row =>
+                            {
+                                row.ConstantItem(58)
+                                    .Height(58)
+                                    .Background(Colors.Blue.Medium)
+                                    .AlignCenter()
+                                    .AlignMiddle()
+                                    .Text("CA")
+                                    .FontColor(Colors.White)
+                                    .FontSize(20)
+                                    .Bold();
+
+                                row.RelativeItem()
+                                    .PaddingLeft(12)
+                                    .Column(col =>
+                                    {
+                                        col.Item()
+                                            .Text("CadastroApp")
+                                            .FontSize(22)
+                                            .Bold()
+                                            .FontColor(Colors.Blue.Darken2);
+
+                                        col.Item()
+                                            .Text("Relatório de Clientes")
+                                            .FontSize(13)
+                                            .FontColor(Colors.Grey.Darken2);
+
+                                        col.Item()
+                                            .Text($"Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm}")
+                                            .FontSize(9)
+                                            .FontColor(Colors.Grey.Darken1);
+                                    });
+                            });
+
+                        header.Item()
+                            .PaddingTop(14)
+                            .Background(Colors.Grey.Lighten4)
+                            .Padding(10)
+                            .Row(row =>
+                            {
+                                row.RelativeItem()
+                                    .Column(col =>
+                                    {
+                                        col.Item()
+                                            .Text("Usuário logado")
+                                            .FontSize(8)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        col.Item()
+                                            .Text(nomeUsuario)
+                                            .FontSize(11)
+                                            .Bold();
+                                    });
+
+                                row.RelativeItem()
+                                    .Column(col =>
+                                    {
+                                        col.Item()
+                                            .Text("Perfil")
+                                            .FontSize(8)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        col.Item()
+                                            .Text(perfilUsuario)
+                                            .FontSize(11)
+                                            .Bold();
+                                    });
+
+                                row.RelativeItem()
+                                    .Column(col =>
+                                    {
+                                        col.Item()
+                                            .Text("Total exportado")
+                                            .FontSize(8)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        col.Item()
+                                            .Text($"{totalClientes} cliente(s)")
+                                            .FontSize(11)
+                                            .Bold()
+                                            .FontColor(Colors.Green.Darken2);
+                                    });
+                            });
+
+                        header.Item()
+                            .PaddingTop(10)
+                            .LineHorizontal(1)
+                            .LineColor(Colors.Grey.Lighten1);
+                    });
+
+                page.Content()
+                    .PaddingTop(12)
+                    .Table(tabela =>
+                    {
+                        tabela.ColumnsDefinition(columns =>
+{
+    columns.RelativeColumn(1.8f); // Nome
+    columns.RelativeColumn(2.0f); // E-mail
+    columns.RelativeColumn(1.2f); // CPF
+    columns.RelativeColumn(1.3f); // Telefone
+    columns.RelativeColumn(2.4f); // Endereço
+    columns.RelativeColumn(1.1f); // Cadastro
+});
+
+                        tabela.Header(header =>
+                        {
+                            header.Cell().Element(CelulaCabecalhoPdf).Text("Nome");
+                            header.Cell().Element(CelulaCabecalhoPdf).Text("E-mail");
+                            header.Cell().Element(CelulaCabecalhoPdf).Text("CPF");
+                            header.Cell().Element(CelulaCabecalhoPdf).Text("Telefone");
+                            header.Cell().Element(CelulaCabecalhoPdf).Text("Endereço");
+                            header.Cell().Element(CelulaCabecalhoPdf).Text("Cadastro");
+                        });
+
+                        foreach (var pessoa in PessoasFiltradas)
+                        {
+                            tabela.Cell().Element(CelulaConteudoPdf).Text(pessoa.Nome ?? "");
+                            tabela.Cell().Element(CelulaConteudoPdf).Text(pessoa.Email ?? "");
+                            tabela.Cell().Element(CelulaConteudoPdf).Text(pessoa.CPF ?? "");
+
+                            tabela.Cell().Element(CelulaConteudoPdf).Text(
+                                string.IsNullOrWhiteSpace(pessoa.Telefone)
+                                    ? "Não informado"
+                                    : pessoa.Telefone
+                            );
+
+                            tabela.Cell().Element(CelulaConteudoPdf).Text(MontarEnderecoPdf(pessoa));
+
+                            tabela.Cell().Element(CelulaConteudoPdf).Text(
+                                pessoa.DataCadastro.ToString("dd/MM/yyyy HH:mm")
+                            );
+                        }
+                    });
+
+                page.Footer()
+                    .PaddingTop(10)
+                    .Column(footer =>
+                    {
+                        footer.Item()
+                            .LineHorizontal(1)
+                            .LineColor(Colors.Grey.Lighten2);
+
+                        footer.Item()
+                            .PaddingTop(6)
+                            .Row(row =>
+                            {
+                                row.RelativeItem()
+                                    .Text("CadastroApp")
+                                    .FontSize(8)
+                                    .FontColor(Colors.Grey.Darken1);
+
+                                row.RelativeItem()
+                                    .AlignRight()
+                                    .Text(texto =>
+                                    {
+                                        texto.Span("Página ")
+                                            .FontSize(8)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        texto.CurrentPageNumber()
+                                            .FontSize(8)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        texto.Span(" de ")
+                                            .FontSize(8)
+                                            .FontColor(Colors.Grey.Darken1);
+
+                                        texto.TotalPages()
+                                            .FontSize(8)
+                                            .FontColor(Colors.Grey.Darken1);
+                                    });
+                            });
+                    });
+            });
+        })
+        .GeneratePdf(caminhoArquivo);
+
+        return caminhoArquivo;
+    }
+
+    static IContainer CelulaCabecalhoPdf(IContainer container)
+    {
+        return container
+            .Background(Colors.Blue.Medium)
+            .Border(1)
+            .BorderColor(Colors.Blue.Darken1)
+            .PaddingVertical(6)
+            .PaddingHorizontal(5)
+            .DefaultTextStyle(x => x.FontColor(Colors.White).Bold().FontSize(9));
+    }
+
+    static IContainer CelulaConteudoPdf(IContainer container)
+    {
+        return container
+            .BorderBottom(1)
+            .BorderColor(Colors.Grey.Lighten2)
+            .PaddingVertical(5)
+            .PaddingHorizontal(5)
+            .DefaultTextStyle(x => x.FontSize(8));
+    }
+
+    string MontarEnderecoPdf(Pessoa pessoa)
+    {
+        var partes = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Rua))
+        {
+            partes.Add(pessoa.Rua);
+        }
+
+        
+        if (!string.IsNullOrWhiteSpace(pessoa.Bairro))
+            partes.Add(pessoa.Bairro);
+
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Numero))
+        {
+            partes.Add($"Nº {pessoa.Numero}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Cidade))
+        {
+            partes.Add(pessoa.Cidade);
+        }
+
+        if (!string.IsNullOrWhiteSpace(pessoa.Estado))
+        {
+            partes.Add(pessoa.Estado);
+        }
+
+        if (!string.IsNullOrWhiteSpace(pessoa.CEP))
+        {
+            partes.Add($"CEP {pessoa.CEP}");
+        }
+
+        return partes.Count == 0 ? "Não informado" : string.Join(", ", partes);
+    }
+}

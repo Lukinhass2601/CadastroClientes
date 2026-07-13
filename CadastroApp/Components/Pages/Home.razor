@@ -1,0 +1,172 @@
+﻿@page "/home"
+
+@using CadastroApp.Services
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+
+<div class="home-container">
+
+    @if (AuthService.UsuarioLogado is not null)
+    {
+        <div class="usuario-logado-card">
+            <div class="usuario-logado-avatar">
+                👤
+            </div>
+
+            <div>
+                <div class="usuario-logado-bemvindo">
+                    Bem-vindo, @AuthService.UsuarioLogado.Nome
+                </div>
+
+                <div class="usuario-logado-perfil @(AuthService.UsuarioLogado.Perfil == "Administrador" ? "usuario-logado-perfil-admin" : "")">
+                    Perfil: @(AuthService.UsuarioLogado.Perfil == "Administrador" ? "Administrador" : "Usuário comum")
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="home-hero">
+        <div class="home-icon">
+            📋
+        </div>
+
+        <h1>CadastroApp</h1>
+
+        <p>
+            Sistema simples para cadastro, consulta e backup de clientes.
+        </p>
+    </div>
+
+    <div class="home-cards">
+
+        <div class="home-card">
+            <div class="home-card-icon cadastro">
+                +
+            </div>
+
+            <h3>Novo Cadastro</h3>
+
+            <p>
+                Cadastre novos clientes informando nome, e-mail, CPF e telefone.
+            </p>
+
+            <button class="btn btn-primary home-button" @onclick="IrParaCadastro">
+                Abrir Cadastro
+            </button>
+        </div>
+
+        <div class="home-card">
+            <div class="home-card-icon lista">
+                ☰
+            </div>
+
+            <h3>Lista de Clientes</h3>
+
+            <p>
+                Consulte, pesquise, visualize detalhes, edite ou exclua clientes cadastrados.
+            </p>
+
+            <button class="btn btn-success home-button" @onclick="IrParaLista">
+                Ver Lista
+            </button>
+        </div>
+
+        <div class="home-card">
+            <div class="home-card-icon backup">
+                ☁
+            </div>
+
+            <h3>Backup</h3>
+
+            <p>
+                Faça backup dos dados ou restaure informações salvas anteriormente.
+            </p>
+
+            <button class="btn btn-secondary home-button" @onclick="IrParaBackup">
+                Abrir Backup
+            </button>
+        </div>
+
+        <div class="home-card">
+            <div class="home-card-icon usuarios">
+                👥
+            </div>
+
+            <h3>Editar Usuário</h3>
+
+            <p>
+                Edite seu usuário, senha e dados de acesso ao aplicativo.
+            </p>
+
+            <button class="btn btn-info home-button text-white" @onclick="IrParaEditarUsuarios">
+                Editar Usuário
+            </button>
+        </div>
+
+        <div class="home-card">
+            <div class="home-card-icon sair">
+                ⎋
+            </div>
+
+            <h3>Sair</h3>
+
+            <p>
+                Encerrar sessão e voltar para a tela de login.
+            </p>
+
+            <button class="btn btn-outline-danger home-button" @onclick="Sair">
+                Sair
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (!AuthService.EstaLogado)
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+
+    void IrParaCadastro()
+    {
+        NavigationManager.NavigateTo("/cadastro");
+    }
+
+    void IrParaLista()
+    {
+        NavigationManager.NavigateTo("/lista");
+    }
+
+    void IrParaBackup()
+    {
+        NavigationManager.NavigateTo("/backup");
+    }
+
+    void IrParaEditarUsuarios()
+    {
+        NavigationManager.NavigateTo("/editar-usuarios");
+    }
+    async Task Sair()
+
+    {
+        bool confirmou = await JSRuntime.InvokeAsync<bool>(
+            "confirm",
+            "Deseja realmente sair do aplicativo?"
+        );
+
+        if (!confirmou)
+        {
+            return;
+        }
+
+        AuthService.Sair();
+        NavigationManager.NavigateTo("/");
+    }
+}

@@ -1,0 +1,151 @@
+﻿@page "/criar-usuario"
+
+@using CadastroApp.Services
+@using Microsoft.JSInterop
+
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<div class="login-container">
+
+    <div class="login-card">
+
+        <div class="login-logo">
+            👤
+        </div>
+
+        <h2>Novo Cadastro</h2>
+
+        <p class="login-subtitulo">
+            Crie um usuário para acessar o aplicativo.
+        </p>
+
+        <div class="mb-3">
+            <label>Usuário:</label>
+            <input class="form-control"
+                   placeholder="Digite um nome de usuário"
+                   @bind="nome"
+                   @bind:event="oninput"
+                   autocomplete="username" />
+        </div>
+
+        <div class="mb-3">
+            <label>Senha:</label>
+
+            <div class="campo-senha-wrapper">
+                <input type="@(mostrarSenha ? "text" : "password")"
+                       class="form-control"
+                       placeholder="Digite uma senha"
+                       @bind="senha"
+                       @bind:event="oninput"
+                       autocomplete="new-password" />
+
+                <button type="button"
+                        class="botao-mostrar-senha"
+                        @onclick="AlternarSenha">
+                    @(mostrarSenha ? "Ocultar" : "Mostrar")
+                </button>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label>Tipo de usuário:</label>
+            <select class="form-control" @bind="perfil">
+                <option value="Comum">Usuário comum</option>
+                <option value="Administrador">Administrador</option>
+            </select>
+        </div>
+
+        @if (perfil == "Administrador")
+        {
+            <div class="mb-3">
+                <label>Senha do administrador principal:</label>
+
+                <div class="campo-senha-wrapper">
+                    <input type="@(mostrarSenhaAdminPrincipal ? "text" : "password")"
+                           class="form-control"
+                           placeholder="Digite a senha do administrador principal"
+                           @bind="senhaAdministradorPrincipal"
+                           @bind:event="oninput"
+                           autocomplete="current-password" />
+
+                    <button type="button"
+                            class="botao-mostrar-senha"
+                            @onclick="AlternarSenhaAdminPrincipal">
+                        @(mostrarSenhaAdminPrincipal ? "Ocultar" : "Mostrar")
+                    </button>
+                </div>
+
+                <small class="texto-ajuda">
+                    Obrigatório para criar outro administrador.
+                </small>
+            </div>
+        }
+
+        <div class="grupo-botoes-login">
+            <button class="btn btn-success botao-login-acao" @onclick="Criar">
+                Salvar usuário
+            </button>
+
+            <button class="btn btn-secondary botao-login-acao" @onclick="Voltar">
+                Voltar
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(mensagem))
+        {
+            <p class="login-mensagem">@mensagem</p>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    string nome = string.Empty;
+    string senha = string.Empty;
+    string perfil = "Comum";
+    string senhaAdministradorPrincipal = string.Empty;
+    string mensagem = string.Empty;
+
+    bool mostrarSenha = false;
+    bool mostrarSenhaAdminPrincipal = false;
+
+    void AlternarSenha()
+    {
+        mostrarSenha = !mostrarSenha;
+    }
+
+    void AlternarSenhaAdminPrincipal()
+    {
+        mostrarSenhaAdminPrincipal = !mostrarSenhaAdminPrincipal;
+    }
+
+    async Task Criar()
+    {
+        mensagem = string.Empty;
+
+        var resultado = await AuthService.CriarUsuarioAsync(
+            nome,
+            senha,
+            perfil,
+            senhaAdministradorPrincipal
+        );
+
+        if (!resultado.sucesso)
+        {
+            mensagem = resultado.mensagem;
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync("alert", "Usuário cadastrado com sucesso!");
+
+        NavigationManager.NavigateTo("/");
+    }
+
+    void Voltar()
+    {
+        NavigationManager.NavigateTo("/");
+    }
+}

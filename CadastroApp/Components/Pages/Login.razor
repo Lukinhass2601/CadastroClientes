@@ -1,0 +1,186 @@
+﻿@page "/"
+
+@using CadastroApp.Services
+@using Microsoft.JSInterop
+
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<div class="login-container">
+
+    <div class="login-card">
+
+        <div class="login-logo">
+            📋
+        </div>
+
+        @if (carregando)
+        {
+            <p class="login-subtitulo">Carregando...</p>
+        }
+        else if (!existeUsuario)
+        {
+            <h2>Primeiro acesso</h2>
+
+            <p class="login-subtitulo">
+                Crie um usuário administrador para começar a usar o aplicativo.
+            </p>
+
+            <div class="mb-3">
+                <label>Administrador:</label>
+                <input class="form-control"
+                       placeholder="Digite o nome do administrador"
+                       @bind="nome"
+                       @bind:event="oninput"
+                       autocomplete="username" />
+            </div>
+
+            <div class="mb-3">
+                <label>Senha:</label>
+
+                <div class="campo-senha-wrapper">
+                    <input type="@(mostrarSenha ? "text" : "password")"
+                           class="form-control"
+                           placeholder="Digite uma senha"
+                           @bind="senha"
+                           @bind:event="oninput"
+                           autocomplete="new-password" />
+
+                    <button type="button"
+                            class="botao-mostrar-senha"
+                            @onclick="AlternarSenha">
+                        @(mostrarSenha ? "Ocultar" : "Mostrar")
+                    </button>
+                </div>
+            </div>
+
+            <div class="grupo-botoes-login">
+                <button class="btn btn-success botao-login-acao"
+                        @onclick="CriarAdministrador">
+                    Criar administrador
+                </button>
+            </div>
+        }
+        else
+        {
+            <h2>CadastroApp</h2>
+
+            <p class="login-subtitulo">
+                Entre para acessar seus cadastros.
+            </p>
+
+            <div class="mb-3">
+                <label>Usuário:</label>
+                <input class="form-control"
+                       placeholder="Digite seu usuário"
+                       @bind="nome"
+                       @bind:event="oninput"
+                       autocomplete="username" />
+            </div>
+
+            <div class="mb-3">
+                <label>Senha:</label>
+
+                <div class="campo-senha-wrapper">
+                    <input type="@(mostrarSenha ? "text" : "password")"
+                           class="form-control"
+                           placeholder="Digite sua senha"
+                           @bind="senha"
+                           @bind:event="oninput"
+                           autocomplete="current-password" />
+
+                    <button type="button"
+                            class="botao-mostrar-senha"
+                            @onclick="AlternarSenha">
+                        @(mostrarSenha ? "Ocultar" : "Mostrar")
+                    </button>
+                </div>
+            </div>
+
+            <div class="grupo-botoes-login">
+                <button class="btn btn-primary botao-login-acao"
+                        @onclick="Entrar">
+                    Entrar
+                </button>
+
+                <button class="btn btn-success botao-login-acao"
+                        @onclick="NovoCadastroUsuario">
+                    Novo Cadastro
+                </button>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(mensagem))
+        {
+            <p class="login-mensagem">@mensagem</p>
+        }
+
+    </div>
+
+</div>
+
+@code {
+    string nome = string.Empty;
+    string senha = string.Empty;
+    string mensagem = string.Empty;
+
+    bool mostrarSenha = false;
+    bool existeUsuario = false;
+    bool carregando = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        existeUsuario = await AuthService.ExisteAlgumUsuarioAsync();
+        carregando = false;
+    }
+
+    void AlternarSenha()
+    {
+        mostrarSenha = !mostrarSenha;
+    }
+
+    async Task CriarAdministrador()
+    {
+        mensagem = string.Empty;
+
+        var resultado = await AuthService.CriarPrimeiroAdministradorAsync(nome, senha);
+
+        if (!resultado.sucesso)
+        {
+            mensagem = resultado.mensagem;
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync(
+            "alert",
+            "Administrador cadastrado com sucesso! Agora faça login para acessar o aplicativo."
+        );
+
+        nome = string.Empty;
+        senha = string.Empty;
+        mostrarSenha = false;
+
+        existeUsuario = true;
+    }
+
+    async Task Entrar()
+    {
+        mensagem = string.Empty;
+
+        var resultado = await AuthService.LoginAsync(nome, senha);
+
+        if (!resultado.sucesso)
+        {
+            mensagem = resultado.mensagem;
+            return;
+        }
+
+        NavigationManager.NavigateTo("/home");
+    }
+
+    void NovoCadastroUsuario()
+    {
+        NavigationManager.NavigateTo("/criar-usuario");
+    }
+}

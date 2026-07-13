@@ -1,0 +1,168 @@
+﻿@page "/backup"
+
+@using CadastroApp.Services
+@using Microsoft.JSInterop
+@using Microsoft.Maui.ApplicationModel.DataTransfer
+@using Microsoft.Maui.Storage
+
+@inject AuthService AuthService
+@inject PessoaService PessoaService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<h3 class="titulo-pagina">Backup e Restauração</h3>
+
+@if (!usuarioAutorizado)
+{
+    <p class="mensagem-lista">Redirecionando para o login...</p>
+}
+else
+{
+    <div class="backup-container">
+        <p class="texto-explicativo">
+            Use esta tela para fazer uma cópia de segurança do banco de dados ou restaurar um backup salvo anteriormente.
+        </p>
+
+        <div class="backup-card">
+            <h5>Fazer Backup</h5>
+
+            <p>
+                Gera uma cópia do banco de dados atual para você salvar em um local seguro.
+            </p>
+
+            <button class="btn btn-success botao-backup" @onclick="FazerBackup">
+                Fazer Backup
+            </button>
+        </div>
+
+        <div class="backup-card">
+            <h5>Restaurar Backup</h5>
+
+            <p>
+                Restaura um arquivo de backup anterior. Atenção: os dados atuais serão substituídos pelos dados do backup escolhido.
+            </p>
+
+            <button class="btn btn-secondary botao-backup" @onclick="RestaurarBackup">
+                Restaurar Backup
+            </button>
+        </div>
+
+        <button class="btn btn-secondary botao-voltar mt-3" @onclick="Voltar">
+            Voltar
+        </button>
+    </div>
+}
+
+@code {
+    bool usuarioAutorizado = false;
+
+    protected override void OnInitialized()
+    {
+        if (!AuthService.EstaLogado)
+        {
+            NavigationManager.NavigateTo("/");
+            return;
+        }
+
+        usuarioAutorizado = true;
+    }
+
+    async Task FazerBackup()
+    {
+        try
+        {
+            var caminhoBanco = await PessoaService.ObterCaminhoBancoAsync();
+
+            if (!File.Exists(caminhoBanco))
+            {
+                await JSRuntime.InvokeVoidAsync(
+                    "alert",
+                    "Banco de dados não encontrado."
+                );
+
+                return;
+            }
+
+            await PessoaService.FecharConexaoAsync();
+
+            var nomeBackup = $"backup_cadastro_{DateTime.Now:yyyyMMdd_HHmmss}.db3";
+
+            var caminhoTemporario = Path.Combine(
+                FileSystem.CacheDirectory,
+                nomeBackup
+            );
+
+            File.Copy(caminhoBanco, caminhoTemporario, true);
+
+            await Share.Default.RequestAsync(new ShareFileRequest
+            {
+                Title = "Backup do banco de dados",
+                File = new ShareFile(caminhoTemporario)
+            });
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "alert",
+                $"Erro ao fazer backup: {ex.Message}"
+            );
+        }
+    }
+
+    async Task RestaurarBackup()
+    {
+        try
+        {
+            bool confirmou = await JSRuntime.InvokeAsync<bool>(
+                "confirm",
+                "Atenção: restaurar um backup vai substituir todos os dados atuais. Deseja continuar?"
+            );
+
+            if (!confirmou)
+            {
+                return;
+            }
+
+            var arquivo = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Selecione o arquivo de backup"
+            });
+
+            if (arquivo is null)
+            {
+                return;
+            }
+
+            if (!arquivo.FileName.EndsWith(".db3", StringComparison.OrdinalIgnoreCase))
+            {
+                await JSRuntime.InvokeVoidAsync(
+                    "alert",
+                    "Arquivo inválido. Selecione um backup com extensão .db3."
+                );
+
+                return;
+            }
+
+            using var stream = await arquivo.OpenReadAsync();
+
+            await PessoaService.RestaurarBackupAsync(stream);
+
+            await JSRuntime.InvokeVoidAsync(
+                "alert",
+                "Backup restaurado com sucesso!"
+            );
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync(
+                "alert",
+                $"Erro ao restaurar backup: {ex.Message}"
+            );
+        }
+    }
+
+    void Voltar()
+    {
+        NavigationManager.NavigateTo("/home");
+    }
+}

@@ -1,0 +1,26 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Compilação .NET
+bin/
+obj/
+
+# Chaves Android
+*.keystore
+*.jks
+
+# Certificados
+*.pfx
+*.p12
+
+# Bancos locais com dados
+*.db
+*.db3
+*.sqlite
+*.sqlite3
+
+# Segredos
+.env
+secrets.json

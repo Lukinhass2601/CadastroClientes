@@ -1,0 +1,324 @@
+﻿@page "/editar-usuarios"
+
+@using CadastroApp.Models
+@using CadastroApp.Services
+@using Microsoft.JSInterop
+
+@inject AuthService AuthService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<h3 class="titulo-pagina">Editar Usuário</h3>
+
+<p class="texto-explicativo">
+    Edite os dados de acesso. Para salvar alterações, digite sua senha atual.
+</p>
+
+@if (carregando)
+{
+    <p class="mensagem-lista">Carregando...</p>
+}
+else if (usuariosEdicao.Count == 0)
+{
+    <p class="mensagem-lista">Nenhum usuário encontrado.</p>
+}
+else
+{
+    <div class="usuarios-login-lista">
+        @foreach (var item in usuariosEdicao)
+        {
+            <div class="usuario-login-card">
+
+                <div class="usuario-login-topo">
+                    <div class="usuario-login-avatar">
+                        👤
+                    </div>
+
+                    <div>
+                        <strong>@item.NomeOriginal</strong>
+
+                        <span class="usuario-atual">
+                            @ObterDescricaoPerfil(item)
+                        </span>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label>Sua senha atual:</label>
+
+                    <div class="campo-senha-wrapper">
+                        <input type="@(item.MostrarSenhaAtual ? "text" : "password")"
+                               class="form-control"
+                               placeholder="Digite sua senha atual"
+                               @bind="item.SenhaAtual"
+                               @bind:event="oninput"
+                               autocomplete="current-password" />
+
+                        <button type="button"
+                                class="botao-mostrar-senha"
+                                @onclick="() => item.MostrarSenhaAtual = !item.MostrarSenhaAtual">
+                            @(item.MostrarSenhaAtual ? "Ocultar" : "Mostrar")
+                        </button>
+                    </div>
+
+                    <small class="texto-ajuda">
+                        Obrigatório para salvar alterações.
+                    </small>
+                </div>
+
+                <div class="mb-3">
+                    <label>Nome do usuário:</label>
+
+                    <input class="form-control"
+                           placeholder="Digite o nome do usuário"
+                           @bind="item.Nome"
+                           @bind:event="oninput"
+                           autocomplete="username" />
+                </div>
+
+                <div class="mb-3">
+                    <label>Nova senha:</label>
+
+                    <div class="campo-senha-wrapper">
+                        <input type="@(item.MostrarNovaSenha ? "text" : "password")"
+                               class="form-control"
+                               placeholder="Digite uma nova senha"
+                               @bind="item.NovaSenha"
+                               @bind:event="oninput"
+                               autocomplete="new-password" />
+
+                        <button type="button"
+                                class="botao-mostrar-senha"
+                                @onclick="() => item.MostrarNovaSenha = !item.MostrarNovaSenha">
+                            @(item.MostrarNovaSenha ? "Ocultar" : "Mostrar")
+                        </button>
+                    </div>
+
+                    <small class="texto-ajuda">
+                        Deixe em branco para manter a senha atual.
+                    </small>
+                </div>
+
+                @if (AuthService.UsuarioEhAdministradorPrincipal)
+                {
+                    <div class="mb-3">
+                        <label>Tipo de usuário:</label>
+
+                        @if (item.AdministradorPrincipal)
+                        {
+                            <input class="form-control"
+                                   value="Administrador principal"
+                                   readonly />
+                        }
+                        else
+                        {
+                            <select class="form-control" @bind="item.Perfil">
+                                <option value="Comum">Usuário comum</option>
+                                <option value="Administrador">Administrador</option>
+                            </select>
+                        }
+                    </div>
+                }
+
+                <div class="usuario-login-acoes">
+                    <button class="btn btn-primary usuario-login-btn"
+                            @onclick="() => SalvarUsuario(item)">
+                        Salvar
+                    </button>
+
+                    @if (PodeMostrarBotaoExcluir(item))
+                    {
+                        <button class="btn btn-danger usuario-login-btn"
+                                @onclick="() => ExcluirUsuario(item)">
+                            Excluir
+                        </button>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(item.Mensagem))
+                {
+                    <p class="@item.ClasseMensagem">
+                        @item.Mensagem
+                    </p>
+                }
+
+            </div>
+        }
+    </div>
+}
+
+<button class="btn btn-secondary botao-voltar mt-3" @onclick="VoltarHome">
+    Voltar
+</button>
+
+@code {
+    List<UsuarioEdicao> usuariosEdicao = new();
+
+    bool carregando = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.EstaLogado)
+        {
+            NavigationManager.NavigateTo("/");
+            return;
+        }
+
+        await CarregarUsuarios();
+    }
+
+    async Task CarregarUsuarios()
+    {
+        carregando = true;
+
+        var usuarios = await AuthService.ListarUsuariosParaEdicaoAsync();
+
+        usuariosEdicao = usuarios
+            .Select(u => new UsuarioEdicao
+            {
+                Id = u.Id,
+                NomeOriginal = u.Nome,
+                Nome = u.Nome,
+                Perfil = u.Perfil,
+                AdministradorPrincipal = u.AdministradorPrincipal,
+                SenhaAtual = string.Empty,
+                NovaSenha = string.Empty,
+                MostrarSenhaAtual = false,
+                MostrarNovaSenha = false,
+                Mensagem = string.Empty,
+                Sucesso = false
+            })
+            .ToList();
+
+        carregando = false;
+    }
+
+    async Task SalvarUsuario(UsuarioEdicao item)
+    {
+        item.Mensagem = string.Empty;
+        item.Sucesso = false;
+
+        var resultado = await AuthService.AtualizarUsuarioAsync(
+            item.Id,
+            item.SenhaAtual,
+            item.Nome,
+            item.NovaSenha,
+            item.Perfil
+        );
+
+        item.Mensagem = resultado.mensagem;
+        item.Sucesso = resultado.sucesso;
+
+        if (resultado.sucesso)
+        {
+            await CarregarUsuarios();
+        }
+    }
+
+    async Task ExcluirUsuario(UsuarioEdicao item)
+    {
+        item.Mensagem = string.Empty;
+        item.Sucesso = false;
+
+        bool confirmou = await JSRuntime.InvokeAsync<bool>(
+            "confirm",
+            $"Tem certeza que deseja excluir o usuário {item.Nome}?"
+        );
+
+        if (!confirmou)
+        {
+            return;
+        }
+
+        var resultado = await AuthService.ExcluirUsuarioAsync(
+            item.Id,
+            item.SenhaAtual
+        );
+
+        item.Mensagem = resultado.mensagem;
+        item.Sucesso = resultado.sucesso;
+
+        if (resultado.sucesso)
+        {
+            await CarregarUsuarios();
+        }
+    }
+
+    bool PodeMostrarBotaoExcluir(UsuarioEdicao item)
+    {
+        if (AuthService.UsuarioLogado is null)
+        {
+            return false;
+        }
+
+        if (item.Id == AuthService.UsuarioLogado.Id)
+        {
+            return false;
+        }
+
+        if (item.AdministradorPrincipal)
+        {
+            return false;
+        }
+
+        if (AuthService.UsuarioEhAdministradorPrincipal)
+        {
+            return true;
+        }
+
+        if (AuthService.UsuarioEhAdministrador && item.Perfil == "Comum")
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    string ObterDescricaoPerfil(UsuarioEdicao item)
+    {
+        if (item.AdministradorPrincipal)
+        {
+            return "Administrador principal";
+        }
+
+        if (item.Perfil == "Administrador")
+        {
+            return "Administrador";
+        }
+
+        return "Comum";
+    }
+
+    void VoltarHome()
+    {
+        NavigationManager.NavigateTo("/home");
+    }
+
+    class UsuarioEdicao
+    {
+        public int Id { get; set; }
+
+        public string NomeOriginal { get; set; } = string.Empty;
+
+        public string Nome { get; set; } = string.Empty;
+
+        public string Perfil { get; set; } = "Comum";
+
+        public bool AdministradorPrincipal { get; set; }
+
+        public string SenhaAtual { get; set; } = string.Empty;
+
+        public string NovaSenha { get; set; } = string.Empty;
+
+        public bool MostrarSenhaAtual { get; set; }
+
+        public bool MostrarNovaSenha { get; set; }
+
+        public string Mensagem { get; set; } = string.Empty;
+
+        public bool Sucesso { get; set; }
+
+        public string ClasseMensagem =>
+            Sucesso ? "mensagem-sucesso-usuario" : "mensagem-erro-usuario";
+    }
+}
