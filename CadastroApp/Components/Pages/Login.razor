@@ -11,17 +11,13 @@
 
     <div class="login-card">
 
-        <div class="login-logo">
-            📋
-        </div>
-
         @if (carregando)
         {
             <p class="login-subtitulo">Carregando...</p>
         }
         else if (!existeUsuario)
         {
-            <h2>Primeiro acesso</h2>
+            <h2>Login para primeiro acesso</h2>
 
             <p class="login-subtitulo">
                 Crie um usuário administrador para começar a usar o aplicativo.
@@ -64,7 +60,7 @@
         }
         else
         {
-            <h2>CadastroApp</h2>
+            <h2>Login</h2>
 
             <p class="login-subtitulo">
                 Entre para acessar seus cadastros.
